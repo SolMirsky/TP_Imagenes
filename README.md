@@ -6,3 +6,5 @@
 * HAMRA, HERNAN
 * SPANDONARI, VICTORIA
 * WLADIMIRSKY, SOLANGE
+
+Empezamos a trabajar
