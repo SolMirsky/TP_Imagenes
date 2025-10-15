@@ -10,6 +10,7 @@ Dataset: https://www.kaggle.com/datasets/alik05/forest-fire-dataset
 pip install  tensorflow>=2.12, opencv-python, numpy, scikit-image, matplotlib
 """
 
+
 import os
 import cv2
 import json
