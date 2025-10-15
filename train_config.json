@@ -1,0 +1,29 @@
+{
+  "DATA_DIR": "C:\\Users\\nuria\\Downloads\\Forest Fire Dataset",
+  "IMG_SIZE": [
+    160,
+    160
+  ],
+  "BATCH_SIZE": 32,
+  "VAL_SPLIT": 0.2,
+  "TEST_SPLIT": 0.1,
+  "SEED": 42,
+  "EPOCHS": 15,
+  "BASE_LEARNING_RATE": 0.0001,
+  "USE_IMAGENET_WEIGHTS": true,
+  "AUGMENTATION": true,
+  "PREPROC": {
+    "apply_clahe": true,
+    "clahe_clip": 2.0,
+    "clahe_tiles": 8,
+    "apply_dehaze_soft": true,
+    "retinex_sigma": 80.0,
+    "apply_white_balance": true,
+    "wb_eps": 1e-06,
+    "denoise": "bilateral",
+    "bilateral_d": 7,
+    "bilateral_sigmaColor": 50,
+    "bilateral_sigmaSpace": 50,
+    "median_ksize": 3
+  }
+}
