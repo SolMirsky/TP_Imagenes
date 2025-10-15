@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 # CONFIGURACION GENERAL
 
 CONFIG = {
-    "DATA_DIR": r"C:\Users\nuria\Downloads\Forest Fire Dataset",
+    "DATA_DIR": r"Forest Fire Dataset",
     "IMG_SIZE": (160, 160),         # tamaño de inferencia (downscale)
     "BATCH_SIZE": 32,
     "VAL_SPLIT": 0.2,
