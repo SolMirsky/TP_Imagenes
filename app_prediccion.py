@@ -1,4 +1,4 @@
-# app_prediccion_preproc.py
+
 """
 Predicción de incendios forestales con preprocesamiento interactivo
 - El usuario carga una foto
@@ -9,19 +9,20 @@ Predicción de incendios forestales con preprocesamiento interactivo
 Requisitos:
   pip install streamlit tensorflow==2.12.* opencv-python numpy
 """
-
+# app_prediccion.py
 import os
+from pathlib import Path
 import cv2
 import numpy as np
 import streamlit as st
 import tensorflow as tf
 
-# ============= CONFIG =============
-MODEL_PATH = "forest_fire_model_final.keras"   # ← ajustá si tu modelo está en otra ruta
+# ===================== Config =====================
+DEFAULT_MODEL_PATH = "forest_fire_model_final.keras"  # mismo directorio que este script
 IMG_SIZE = (160, 160)
-CLASS_NAMES = ["Sin Fuego", "Fuego"]          # ajustá al orden real si difiere
+CLASS_NAMES = ["Fuego", "Sin Fuego"]  # ajustá el orden si tu modelo fue entrenado distinto
 
-# ============= Utils de imagen =============
+# ================== Utils imagen ==================
 def to_uint8(img):
     img = np.clip(img, 0, 255)
     return img.astype(np.uint8)
@@ -67,7 +68,6 @@ def denoise_median(bgr, ksize=3):
     return cv2.medianBlur(bgr, k)
 
 def increase_saturation(bgr, factor=1.2):
-    # BGR -> HSV, escalar S
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.float32)
     h, s, v = cv2.split(hsv)
     s = np.clip(s * float(factor), 0, 255)
@@ -76,47 +76,65 @@ def increase_saturation(bgr, factor=1.2):
 
 def to_grayscale(bgr):
     g = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    return cv2.cvtColor(g, cv2.COLOR_GRAY2BGR)  # mantener 3 canales
+    return cv2.cvtColor(g, cv2.COLOR_GRAY2BGR)
 
 def preprocess_for_model(rgb_u8):
-    """
-    Prepara imagen para el modelo:
-      - resize a IMG_SIZE
-      - normalización [0,1]
-    NOTA: Si tu modelo espera otra cosa (p.ej. preprocess_input), adaptalo acá.
-    """
     rgb = cv2.resize(rgb_u8, IMG_SIZE, interpolation=cv2.INTER_AREA)
     x = rgb.astype(np.float32) / 255.0
-    return x
+    return x  # (H, W, 3) en [0,1]
 
-# ============= Modelo =============
-@st.cache_resource
-def load_model():
-    if not os.path.exists(MODEL_PATH):
-        st.error(f"No se encontró el modelo: {MODEL_PATH}")
-        st.stop()
-    return tf.keras.models.load_model(MODEL_PATH)
+# =============== Carga de modelo (cache) ===========
+@st.cache_resource(show_spinner=False)
+def load_default_model():
+    """
+    Carga el modelo por defecto. Si contiene Lambda (modelos viejos),
+    reintenta con safe_mode=False.
+    """
+    p = Path(DEFAULT_MODEL_PATH).resolve()
+    if not p.exists():
+        raise FileNotFoundError(
+            f"No se encontró el modelo por defecto en: {p}\n"
+            f"Colocá 'forest_fire_model_final.keras' en la misma carpeta de esta app."
+        )
+    try:
+        m = tf.keras.models.load_model(p.as_posix())  # modelos nuevos (sin Lambda)
+        return m, str(p), False
+    except ValueError as e:
+        if "deserialization of a `Lambda` layer" in str(e):
+            m = tf.keras.models.load_model(p.as_posix(), safe_mode=False)
+            return m, str(p), True
+        raise
 
-# ============= UI =============
-st.set_page_config(page_title="Incendios - Predicción con Preprocesado", page_icon="🔥", layout="centered")
-st.title("🔥 Clasificador de Incendios con Preprocesamiento Interactivo")
+# ========================= UI ======================
+st.set_page_config(page_title="Incendios - Predicción con Preprocesado", page_icon="🔥", layout="wide")
+st.title("🔥 Clasificador de Incendios — Preprocesamiento y predicción")
 
-st.write("Cargá una imagen, aplicá procesamientos opcionales y luego predecí con el modelo entrenado.")
+# Cargar modelo automáticamente
+try:
+    model, model_path_used, used_unsafe = load_default_model()
+    if used_unsafe:
+        st.warning(f"Modelo cargado con `safe_mode=False` (contiene Lambda):\n{model_path_used}")
+    else:
+        st.success(f"Modelo cargado: {model_path_used}")
+except Exception as e:
+    st.error(str(e))
+    st.stop()
 
+# Panel imagen
+st.header("Imagen")
+uploaded = st.file_uploader("Elegí una imagen (JPG/PNG)", type=["jpg", "jpeg", "png"])
+
+# Panel de procesado (lateral)
 with st.sidebar:
-    st.header("Procesamientos")
-    # Botones/checkbox para activar cada paso
-    do_gray   = st.checkbox("Blanco y Negro", value=False)
-    do_wb     = st.checkbox("Balance de blancos (Gray World)", value=False)
-    do_sat    = st.checkbox("Más saturación", value=False)
-    do_denoise= st.checkbox("Denoise", value=False)
-    do_dehaze = st.checkbox("Dehazing (Retinex)", value=False)
-    do_clahe  = st.checkbox("CLAHE", value=False)
+    st.header("Procesamientos de imagen")
+    do_gray    = st.checkbox("Blanco y Negro", value=False)
+    do_wb      = st.checkbox("Balance de blancos (Gray World)", value=False)
+    do_sat     = st.checkbox("Más saturación", value=False)
+    do_denoise = st.checkbox("Denoise", value=False)
+    do_dehaze  = st.checkbox("Dehazing (Retinex)", value=False)
+    do_clahe   = st.checkbox("CLAHE", value=False)
 
-    st.markdown("---")
     st.subheader("Parámetros")
-
-    # Parámetros por operación
     sat_factor = st.slider("Factor de saturación", 0.5, 2.5, 1.2, 0.1)
     denoise_mode = st.selectbox("Modo denoise", ["bilateral", "median"])
     bilateral_d = st.slider("bilateral d", 3, 15, 7, 2)
@@ -127,27 +145,20 @@ with st.sidebar:
     clahe_clip = st.slider("CLAHE clipLimit", 0.5, 5.0, 2.0, 0.1)
     clahe_tiles = st.slider("CLAHE tiles", 4, 16, 8, 1)
 
-uploaded = st.file_uploader("Elegí una imagen (JPG/PNG)", type=["jpg", "jpeg", "png"])
-
 if uploaded:
-    # Leer archivo como BGR (OpenCV)
     file_bytes = np.frombuffer(uploaded.read(), np.uint8)
     bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     if bgr is None:
         st.error("No se pudo leer la imagen.")
         st.stop()
 
-    st.subheader("Vista previa y preprocesamiento")
     col1, col2 = st.columns(2, gap="large")
-
     with col1:
-        st.markdown("**Original**")
+        st.subheader("Original")
         st.image(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), channels="RGB", use_column_width=True)
 
-    # Copia para editar
+    # Aplicar procesamientos
     bgr_proc = bgr.copy()
-
-    # Aplicar operaciones seleccionadas
     if do_gray:
         bgr_proc = to_grayscale(bgr_proc)
     if do_wb:
@@ -156,9 +167,8 @@ if uploaded:
         bgr_proc = increase_saturation(bgr_proc, factor=sat_factor)
     if do_denoise:
         if denoise_mode == "bilateral":
-            bgr_proc = denoise_bilateral(
-                bgr_proc, d=bilateral_d, sigmaColor=bilateral_sigmaColor, sigmaSpace=bilateral_sigmaSpace
-            )
+            bgr_proc = denoise_bilateral(bgr_proc, d=bilateral_d,
+                                         sigmaColor=bilateral_sigmaColor, sigmaSpace=bilateral_sigmaSpace)
         else:
             bgr_proc = denoise_median(bgr_proc, ksize=median_ksize)
     if do_dehaze:
@@ -167,17 +177,14 @@ if uploaded:
         bgr_proc = apply_clahe_bgr(bgr_proc, clip=clahe_clip, tiles=clahe_tiles)
 
     with col2:
-        st.markdown("**Procesada (previa a la predicción)**")
+        st.subheader("Procesada (previa a la predicción)")
         st.image(cv2.cvtColor(bgr_proc, cv2.COLOR_BGR2RGB), channels="RGB", use_column_width=True)
 
-    # ===== Predicción =====
     st.markdown("---")
-    model = load_model()
-
-    # Prepara para el modelo (usa RGB [0,1]; adaptá si tu modelo necesita otra cosa)
+    # Preparar para el modelo
     rgb_for_model = cv2.cvtColor(bgr_proc, cv2.COLOR_BGR2RGB)
-    x = preprocess_for_model(rgb_for_model)
-    x = np.expand_dims(x, axis=0)  # (1, H, W, 3)
+    x = preprocess_for_model(rgb_for_model)  # [0,1]
+    x = np.expand_dims(x, axis=0)
 
     if st.button("🔎 Predecir"):
         probs = model.predict(x, verbose=0)[0]

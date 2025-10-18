@@ -1,9 +1,5 @@
 """
 Clasificación de incendios en paisajes forestales (sin preprocesamientos de imagen)
-- Sin CLAHE, sin Retinex, sin balance de blancos, sin denoise
-- Resize a tamaño de inferencia (hecho por image_dataset_from_directory)
-- Normalización a [0,1] y conversión a lo que espera MobileNetV2
-
 Dataset: https://www.kaggle.com/datasets/alik05/forest-fire-dataset
 Instalar: pip install "tensorflow>=2.12" numpy scikit-learn matplotlib
 """
@@ -17,41 +13,38 @@ from tensorflow.keras import layers, models
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 
-# =========================
+
 # CONFIGURACION GENERAL
-# =========================
+
 CONFIG = {
-    "DATA_DIR": r"Forest Fire Dataset",   # <-- ajustá esta ruta a tu carpeta
-    "IMG_SIZE": (160, 160),               # tamaño de inferencia
+    "DATA_DIR": r"Forest Fire Dataset",
+    "IMG_SIZE": (160, 160),
     "BATCH_SIZE": 32,
     "VAL_SPLIT": 0.2,
-    "TEST_SPLIT": 0.1,                    # fracción del total para test
+    "TEST_SPLIT": 0.1,
     "SEED": 42,
-    "EPOCHS": 15,
+    "EPOCHS": 5,
     "BASE_LEARNING_RATE": 1e-4,
     "USE_IMAGENET_WEIGHTS": True,
     "AUGMENTATION": True,
 }
 
-# Carpeta y rutas de guardado (evita OSError [Errno 22] en Windows)
-SAVE_DIR = Path.cwd() / "models"
-SAVE_DIR.mkdir(parents=True, exist_ok=True)
-BEST_PATH  = SAVE_DIR / "forest_fire_best.keras"
-FINAL_PATH = SAVE_DIR / "forest_fire_model_final.keras"
 
-# =========================
+# RUTAS DE GUARDADO 
+
+BEST_PATH  = Path.cwd() / "forest_fire_best.keras"
+FINAL_PATH = Path.cwd() / "forest_fire_model_final.keras"
+JSON_PATH  = Path.cwd() / "train_config.json"
+
+
 # DATASETS (train/val/test)
-# =========================
+
 def make_splits():
-    """
-    Carga train/val/test con resize directo a IMG_SIZE.
-    Sin preprocesado adicional; solo normalización más adelante.
-    """
     train = tf.keras.utils.image_dataset_from_directory(
         CONFIG["DATA_DIR"],
         labels="inferred",
         label_mode="int",
-        image_size=CONFIG["IMG_SIZE"],      # resize aquí
+        image_size=CONFIG["IMG_SIZE"],
         batch_size=CONFIG["BATCH_SIZE"],
         validation_split=CONFIG["VAL_SPLIT"],
         subset="training",
@@ -71,7 +64,6 @@ def make_splits():
     )
     class_names = train.class_names
 
-    # set completo para muestrear test (nota: puede solapar con train/val si no separás por carpeta)
     full = tf.keras.utils.image_dataset_from_directory(
         CONFIG["DATA_DIR"],
         labels="inferred",
@@ -87,9 +79,9 @@ def make_splits():
 
     return train, val, test, class_names
 
-# =========================
+
 # DATA AUGMENTATION
-# =========================
+
 def build_augmentation():
     if not CONFIG["AUGMENTATION"]:
         return tf.keras.Sequential(name="no_aug")
@@ -103,18 +95,17 @@ def build_augmentation():
         name="augment",
     )
 
-# =========================
+
 # MODELO (Transfer Learning)
-# =========================
+
 def build_model(num_classes):
     weights = "imagenet" if CONFIG["USE_IMAGENET_WEIGHTS"] else None
 
-    inputs = layers.Input(shape=(*CONFIG["IMG_SIZE"], 3), dtype=tf.float32)  # recibirá [0,1]
-    x = build_augmentation()(inputs)  # aug en [0,1]
+    inputs = layers.Input(shape=(*CONFIG["IMG_SIZE"], 3), dtype=tf.float32)
+    x = build_augmentation()(inputs)
 
-    # MobileNetV2 espera entrada preprocesada de [0,255] -> [-1,1]
-    # Convertimos dentro del grafo para mantener el pipeline en un solo modelo.
-    x = layers.Lambda(lambda t: tf.keras.applications.mobilenet_v2.preprocess_input(t * 255.0))(x)
+
+    x = layers.Rescaling(scale=2.0, offset=-1.0)(x)
 
     base = tf.keras.applications.MobileNetV2(
         include_top=False,
@@ -122,7 +113,7 @@ def build_model(num_classes):
         input_shape=(*CONFIG["IMG_SIZE"], 3),
         pooling="avg",
     )
-    base.trainable = False  # warmup del head primero
+    base.trainable = False
 
     x = base(x, training=False)
     x = layers.Dropout(0.2)(x)
@@ -136,18 +127,17 @@ def build_model(num_classes):
     )
     return model, base
 
-# =========================
-# DATA PIPELINE (normalización + performance)
-# =========================
+
+# DATA PIPELINE
+
 def add_preprocessing(ds):
-    # Normaliza a [0,1] y optimiza pipeline
+   
     ds = ds.map(lambda x, y: (tf.cast(x, tf.float32) / 255.0, y),
                 num_parallel_calls=tf.data.AUTOTUNE)
     return ds.cache().prefetch(tf.data.AUTOTUNE)
 
-# =========================
 # ENTRENAMIENTO
-# =========================
+
 def train():
     train_raw, val_raw, test_raw, class_names = make_splits()
     num_classes = len(class_names)
@@ -172,10 +162,9 @@ def train():
         callbacks=cb,
     )
 
-    # Fine-tuning parcial
     print("Fine-tuning parcial...")
     base.trainable = True
-    for layer in base.layers[:-30]:  # deja libres ~30 capas finales
+    for layer in base.layers[:-30]:
         layer.trainable = False
 
     model.compile(
@@ -187,16 +176,14 @@ def train():
     hist_ft = model.fit(
         train_ds,
         validation_data=val_ds,
-        epochs=max(6, CONFIG["EPOCHS"] // 3),
+        epochs=max(3, CONFIG["EPOCHS"] // 3),
         callbacks=cb,
     )
 
-    # Evaluación
     print("Evaluando en test...")
     test_loss, test_acc = model.evaluate(test_ds)
     print(f"Test acc: {test_acc:.4f}")
 
-    # Reporte detallado
     y_true, y_pred = [], []
     for xb, yb in test_ds:
         preds = model.predict(xb, verbose=0)
@@ -207,9 +194,9 @@ def train():
     print("\nConfusion Matrix:\n", confusion_matrix(y_true, y_pred))
     print("\nClassification Report:\n", classification_report(y_true, y_pred, target_names=class_names))
 
-    # Guardado seguro en Windows
+    # Guardar en la carpeta actual
     model.save(FINAL_PATH.as_posix())
-    with open((SAVE_DIR / "train_config.json").as_posix(), "w", encoding="utf-8") as f:
+    with open(JSON_PATH.as_posix(), "w", encoding="utf-8") as f:
         json.dump(CONFIG, f, indent=2, ensure_ascii=False)
 
     # Plots
@@ -225,9 +212,8 @@ def train():
     _plot_hist(hist, "Head training")
     _plot_hist(hist_ft, "Fine-tuning")
 
-# =========================
 # MAIN
-# =========================
+
 if __name__ == "__main__":
     tf.keras.utils.set_random_seed(CONFIG["SEED"])
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
