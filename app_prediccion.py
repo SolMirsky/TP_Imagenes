@@ -22,19 +22,8 @@ import matplotlib.pyplot as plt
 """
 Predicción de incendios forestales con preprocesamiento interactivo
 
-Requisitos:
-    pip install streamlit tensorflow==2.12.* opencv-python numpy altair
 """
 
-import os
-from pathlib import Path
-import cv2
-import numpy as np
-import streamlit as st
-import tensorflow as tf
-import pandas as pd
-import altair as alt
-import matplotlib.pyplot as plt # Aunque no se usa en el script, se mantiene por si es necesario en el futuro
 
 
 # Personalización de la interfaz 
@@ -55,7 +44,7 @@ st.markdown("""
 
     /* Títulos */
     .big-title {
-        font-size:38px; /* Aumentado */
+        font-size:38px; 
         font-weight:800;
         color: #ff7a45; /* Acento fuego */
         margin-bottom: 6px;
@@ -64,7 +53,30 @@ st.markdown("""
         color: #d1d5db;
         margin-top: -6px;
         margin-bottom: 14px;
-        font-size: 16px; /* Ajustado */
+        font-size: 16px; 
+    }
+
+    /* Botón de Carga de Archivos (Browse files) */
+    section[data-testid="stFileUploader"] {
+        margin-bottom: 20px;
+    }
+    .stFileUploader button {
+        background-color: #2c3e50 !important; 
+        color: #ffffff !important; 
+        border: 1px solid #ff7a45; 
+        border-radius: 8px;
+        padding: 8px 15px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .stFileUploader button:hover {
+        background-color: #3b5268 !important;
+        border-color: #ff4a1a;
+    }
+    section[data-testid="stFileUploader"] label div span {
+        color: #f8fafc !important; 
+        font-weight: 600;
+        font-size: 16px;
     }
 
     /* Botón principal (Predecir) */
@@ -73,8 +85,8 @@ st.markdown("""
         color: white;
         border-radius: 10px;
         font-weight: 700;
-        padding: 10px 20px; /* Un poco más grande */
-        transition: all 0.2s; /* Animación */
+        padding: 10px 20px; 
+        transition: all 0.2s; 
         border: none;
     }
     .stButton>button:hover {
@@ -85,35 +97,19 @@ st.markdown("""
 
     /* Sidebar - Estilos específicos */
     .sidebar .stCheckbox > label {
-        color: #f8fafc; /* Color del texto para checkboxes */
+        color: #f8fafc; 
         font-weight: 500;
     }
     .sidebar .stSlider label {
         font-weight: 500;
     }
-    .css-1d391kg {  /* Estilo para la barra lateral en algunas versiones */
+    .css-1d391kg {  
         background: rgba(0,0,0,0.12);
         border-radius: 8px;
     }
     
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #2c3e50; /* Base oscura */
-        color: #fefae0;
-        border-radius: 8px 8px 0 0;
-        padding: 10px 20px;
-        border: 1px solid #4a657c;
-        transition: all 0.2s;
-    }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        background-color: #e63946; /* Rojo/Fuego para activa */
-        color: white;
-        font-weight: bold;
-        border: 1px solid #e63946;
-    }
+    /* Remover estilo de tabs, ya que se eliminaron */
+    /* stTabs CSS removido */
 
     /* Footer oculto por defecto de Streamlit */
     footer {visibility: hidden;}
@@ -127,14 +123,14 @@ st.set_page_config(
 )
 
 
-# Configuración general
+# Config general
 
 DEFAULT_MODEL_PATH = "forest_fire_model_final.keras"
 IMG_SIZE = (160, 160)
 CLASS_NAMES = ["Fuego", "Sin Fuego"]
 
-
-# Funciones de procesamiento de imagen
+=
+# Funciones de procesamiento de imagen 
 
 def to_uint8(img):
     return np.clip(img, 0, 255).astype(np.uint8)
@@ -142,7 +138,6 @@ def to_uint8(img):
 def apply_clahe_bgr(bgr, clip=2.0, tiles=8):
     lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
-    # Convertir a int para evitar errores con cv2.createCLAHE
     clahe = cv2.createCLAHE(clipLimit=float(clip), tileGridSize=(int(tiles), int(tiles))) 
     l2 = clahe.apply(l)
     lab2 = cv2.merge([l2, a, b])
@@ -191,7 +186,6 @@ def to_grayscale(bgr):
     return cv2.cvtColor(g, cv2.COLOR_GRAY2BGR)
 
 def adjust_rgb_channels(bgr, r_factor=1.0, g_factor=1.0, b_factor=1.0):
-    # Ajusta la intensidad de los canales R, G y B de forma independiente
     b, g, r = cv2.split(bgr.astype(np.float32))
     r = np.clip(r * r_factor, 0, 255)
     g = np.clip(g * g_factor, 0, 255)
@@ -204,7 +198,52 @@ def preprocess_for_model(rgb_u8):
     return x
 
 
-# Cargar modelo
+# Función de Predicción
+
+def make_prediction(model, bgr_img, key_suffix, col_container):
+    rgb_for_model = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+    x = np.expand_dims(preprocess_for_model(rgb_for_model), axis=0)
+
+    
+    result_placeholder = col_container.empty()
+    result_placeholder.info("Analizando imagen...")
+
+    try:
+        probs = model.predict(x, verbose=0)[0]
+        top_index = int(np.argmax(probs))
+    except Exception as e:
+        result_placeholder.error(f"Error en la predicción: {e}")
+        return
+
+    # Mostrar el resultado final
+    result_placeholder.empty()
+
+    pred_class = CLASS_NAMES[top_index]
+    pred_prob = probs[top_index]
+
+    if pred_class == "Fuego":
+        col_container.markdown(
+            f"""
+            <div style='background-color: #e63946; padding: 10px; border-radius: 8px; text-align: center;'>
+                <span style='font-size: 18px; font-weight: bold;'>🔥🔥 ¡ALERTA DE FUEGO! 🔥🔥</span><br>
+                <span style='font-size: 24px; font-weight: bold;'>{pred_prob:.2%}</span>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+    else:
+        col_container.markdown(
+            f"""
+            <div style='background-color: #1dd1a1; padding: 10px; border-radius: 8px; text-align: center;'>
+                <span style='font-size: 18px; font-weight: bold;'>✅ Sin Fuego Detectado</span><br>
+                <span style='font-size: 24px; font-weight: bold;'>{pred_prob:.2%}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+# Cargar modelo 
 
 @st.cache_resource(show_spinner="Cargando modelo de detección de incendios...")
 def load_default_model():
@@ -216,13 +255,12 @@ def load_default_model():
         return m, str(p), False
     except ValueError as e:
         if "Lambda" in str(e):
-            # Carga el modelo con safe_mode=False si hay problemas con capas custom o Lambdas
             m = tf.keras.models.load_model(p.as_posix(), safe_mode=False)
             return m, str(p), True
         raise
 
 
-# Interfaz principal
+# Interfaz principal 
 
 st.markdown('<div class="big-title">🔥 Detector de Incendios Forestales 🌲</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Sube una imagen, prueba preprocesados interactivos y evalúa la predicción del modelo.</div>', unsafe_allow_html=True)
@@ -236,6 +274,10 @@ except Exception as e:
     st.stop()
 
 uploaded = st.file_uploader("🖼️ Elegí una imagen (JPG/PNG)", type=["jpg", "jpeg", "png"])
+
+# Inicialización de estado para controlar la predicción
+if 'run_prediction' not in st.session_state:
+    st.session_state.run_prediction = False
 
 if uploaded:
     file_bytes = np.frombuffer(uploaded.read(), np.uint8)
@@ -257,162 +299,115 @@ if uploaded:
     r_factor = 1.0
     g_factor = 1.0
     b_factor = 1.0
-    denoise_mode = "bilateral" # Inicialización para evitar errores
+    denoise_mode = "bilateral" 
 
-    # --- Barra Lateral (Controles)
+    # --- Barra Lateral (Controles) ---
     with st.sidebar:
-        st.title("⚙️ Ajustes")
+        st.title("⚙️ Ajustes de Procesamiento")
         st.markdown("**Selecciona los filtros que deseas aplicar:**")
         
-        # 1. Checkboxes
         do_gray = st.checkbox("Escala de Grises")
         do_wb = st.checkbox("Corrección de Color (Balance de Blancos)")
-        do_sat = st.checkbox("Saturación")
-        do_rgb = st.checkbox("Ajuste de Color (RGB)")
-        do_clahe = st.checkbox("Contraste (CLAHE)")
+        do_sat = st.checkbox("Aumentar Saturación")
+        do_rgb = st.checkbox("Ajuste Fino de Color (RGB)")
+        do_clahe = st.checkbox("Realce de Contraste Adaptativo (CLAHE)")
         do_dehaze = st.checkbox("Eliminación de Niebla (Retinex)")
         do_denoise = st.checkbox("Reducción de Ruido")
         
         st.markdown("---")
-        st.markdown("### Parámetros Fijos")
+        st.markdown("### Parámetros")
         
-        # 2. Parámetros (Usando Expander)
-        
-        # Saturación
         if do_sat:
-            with st.expander("Saturación", expanded=True):
+            with st.expander("Ajustes de Saturación", expanded=True):
                 sat_factor = st.slider("Factor de Saturación", 0.5, 2.5, 1.2, 0.1)
-
-        # RGB
         if do_rgb:
             with st.expander("Ajustes de Intensidad RGB", expanded=True):
-                r_factor = st.slider("Rojo (R)", 0.0, 2.5, 1.0, 0.1)
-                g_factor = st.slider("Verde (G)", 0.0, 2.5, 1.0, 0.1)
-                b_factor = st.slider("Azul (B)", 0.0, 2.5, 1.0, 0.1)
-        
-        # CLAHE
+                r_factor = st.slider("Intensidad del Rojo (R)", 0.0, 2.5, 1.0, 0.1)
+                g_factor = st.slider("Intensidad del Verde (G)", 0.0, 2.5, 1.0, 0.1)
+                b_factor = st.slider("Intensidad del Azul (B)", 0.0, 2.5, 1.0, 0.1)
         if do_clahe:
-            with st.expander("Contraste (CLAHE)", expanded=True):
+            with st.expander("Ajustes de CLAHE", expanded=True):
                 clahe_clip = st.slider("Límite de Contraste (ClipLimit)", 0.5, 5.0, 2.0, 0.1)
                 clahe_tiles = st.slider("Tamaño de la Malla (Tiles)", 4, 16, 8, 1)
-
-        # Dehazing (Retinex)
         if do_dehaze:
-            with st.expander("Ajustes de Niebla (Retinex)", expanded=True):
-                retinex_sigma = st.slider("Desempañamiento ($\sigma$)", 10.0, 120.0, 80.0, 1.0)
-        
-        # Denoise
+            with st.expander("Ajustes de Retinex", expanded=True):
+                retinex_sigma = st.slider("Sigma Desempañamiento ($\sigma$)", 10.0, 120.0, 80.0, 1.0)
         if do_denoise:
             with st.expander("Ajustes de Reducción de Ruido", expanded=True):
                 denoise_mode = st.selectbox("Modo de Ruido", ["Bilateral", "Mediana"])
-                
                 if denoise_mode == "Bilateral":
                     bilateral_d = st.slider("Diámetro (d)", 3, 15, 7, 2)
                     bilateral_sigmaColor = st.slider("Suavizado de Color ($\sigma_c$)", 10, 100, 50, 5)
                     bilateral_sigmaSpace = st.slider("Suavizado Espacial ($\sigma_s$)", 10, 100, 50, 5)
-                else: # Mediana
-                    # st.slider requiere valores impares para kernel size
+                else: 
                     median_ksize = st.slider("Tamaño del Kernel", 3, 11, 3, 2)
+        
+        # Si cambia cualquier control, reinicia el estado de la predicción
+        st.session_state.run_prediction = False
 
-    # --- Pestañas (Tabs) ---
-    tab1, tab2 = st.tabs(["🖼️ Procesamiento Interactivo", "📊 Predicción del Modelo"])
+    # --- Contenido Principal: Imágenes y Preprocesamiento ---
+    
+    # Aplicar preprocesamientos
+    bgr_proc = bgr.copy()
+    applied = []
+    
+    if do_gray: 
+        bgr_proc = to_grayscale(bgr_proc)
+        applied.append("Grises")
+    if do_wb: 
+        bgr_proc = white_balance_gray_world(bgr_proc)
+        applied.append("WB")
+    if do_rgb:
+        bgr_proc = adjust_rgb_channels(bgr_proc, r_factor, g_factor, b_factor)
+        applied.append(f"RGB(R×{r_factor},G×{g_factor},B×{b_factor})")
+    if do_sat: 
+        bgr_proc = increase_saturation(bgr_proc, factor=sat_factor)
+        applied.append(f"Sat×{sat_factor}")
+    if do_dehaze: 
+        bgr_proc = retinex_dehaze(bgr_proc, retinex_sigma)
+        applied.append("Retinex")
+    if do_clahe: 
+        bgr_proc = apply_clahe_bgr(bgr_proc, clahe_clip, clahe_tiles)
+        applied.append("CLAHE")
+    if do_denoise:
+        if denoise_mode == "Bilateral":
+            bgr_proc = denoise_bilateral(bgr_proc, bilateral_d, bilateral_sigmaColor, bilateral_sigmaSpace)
+            applied.append(f"Denoise(Bilat)")
+        else:
+            bgr_proc = denoise_median(bgr_proc, median_ksize)
+            applied.append(f"Denoise(Med)")
 
-    with tab1:
-        col1, col2 = st.columns(2)
+    #  Mostrar las imágenes
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Imagen Cargada")
+        st.image(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+        # Placeholder para el resultado de la imagen original
+        pred_placeholder_original = st.empty() 
+        
+    with col2:
+        st.subheader("Vista Previa")
+        caption = " → ".join(applied) if applied else "Ningún filtro aplicado"
+        st.image(cv2.cvtColor(bgr_proc, cv2.COLOR_BGR2RGB), caption=caption,use_container_width=True)
+        # Placeholder para el resultado de la imagen preprocesada
+        pred_placeholder_proc = st.empty()
+    
+    st.markdown("---")
 
+    #  Botón de Predicción (Único)
+    if st.button("🔎 Ejecutar Predicción", use_container_width=True):
+        st.session_state.run_prediction = True
+
+    #  Ejecutar y mostrar predicción 
+    if st.session_state.run_prediction:
+        # Predicción para Imagen Original
         with col1:
-            st.subheader("Imagen Cargada")
-            st.image(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
-
-        # Aplicar procesamientos
-        bgr_proc = bgr.copy()
-        applied = []
+            make_prediction(model, bgr, "original", pred_placeholder_original)
         
-        # Orden de aplicación: Grises -> Color/Balance -> Mejora -> Ruido
-        if do_gray: 
-            bgr_proc = to_grayscale(bgr_proc)
-            applied.append("Grises")
-        if do_wb: 
-            bgr_proc = white_balance_gray_world(bgr_proc)
-            applied.append("WB")
-        if do_rgb:
-            # Importante: los factores deben estar definidos (ya lo están arriba)
-            bgr_proc = adjust_rgb_channels(bgr_proc, r_factor, g_factor, b_factor)
-            applied.append(f"RGB(R×{r_factor},G×{g_factor},B×{b_factor})")
-        if do_sat: 
-            bgr_proc = increase_saturation(bgr_proc, factor=sat_factor)
-            applied.append(f"Sat×{sat_factor}")
-        if do_dehaze: 
-            bgr_proc = retinex_dehaze(bgr_proc, retinex_sigma)
-            applied.append("Retinex")
-        if do_clahe: 
-            bgr_proc = apply_clahe_bgr(bgr_proc, clahe_clip, clahe_tiles)
-            applied.append("CLAHE")
-        if do_denoise:
-            if denoise_mode == "Bilateral":
-                bgr_proc = denoise_bilateral(bgr_proc, bilateral_d, bilateral_sigmaColor, bilateral_sigmaSpace)
-                applied.append(f"Denoise(Bilat)")
-            else:
-                bgr_proc = denoise_median(bgr_proc, median_ksize)
-                applied.append(f"Denoise(Med)")
-
-
+        # Predicción para Imagen Preprocesada
         with col2:
-            st.subheader("Vista Previa")
-            caption = " → ".join(applied) if applied else "Ningún filtro aplicado"
-            st.image(cv2.cvtColor(bgr_proc, cv2.COLOR_BGR2RGB), caption=caption,use_container_width=True)
-
-    with tab2:
-        st.header("Análisis del modelo")
-        
-        # Preparar la imagen para el modelo
-        rgb_for_model = cv2.cvtColor(bgr_proc, cv2.COLOR_BGR2RGB)
-        x = np.expand_dims(preprocess_for_model(rgb_for_model), axis=0)
-
-        if st.button("🔎 Ejecutar Predicción", use_container_width=True):
-            
-            # Placeholder para mostrar el resultado rápidamente mientras se calcula
-            with st.spinner('Analizando imagen...'):
-                probs = model.predict(x, verbose=0)[0]
-                top_index = int(np.argmax(probs))
-                
-            # Muestra el resultado de forma impactante
-            if CLASS_NAMES[top_index] == "Fuego":
-                st.warning(f"🔥🔥 ¡ALERTA DE FUEGO DETECTADO! 🔥🔥")
-                st.markdown(f"**Probabilidad de Fuego:** **<span style='color:#e63946; font-size:24px;'>{probs[top_index]:.2%}</span>**", unsafe_allow_html=True)
-            else:
-                st.success("✅ Sin Fuego Detectado")
-                st.markdown(f"**Probabilidad Sin Fuego:** **<span style='color:#1dd1a1; font-size:24px;'>{probs[top_index]:.2%}</span>**", unsafe_allow_html=True)
-            
-            st.markdown("---")
-            st.subheader("Distribución de Probabilidades")
-
-            # Gráfico de barras
-            df_probs = pd.DataFrame({
-                "Clase": CLASS_NAMES,
-                "Probabilidad": [float(p) for p in probs]
-            })
-            
-            # Definir colores para el gráfico
-            color_scale = alt.Scale(domain=CLASS_NAMES, range=["#e63946", "#1dd1a1"])
-            
-            chart = alt.Chart(df_probs).mark_bar(cornerRadiusTopLeft=10, cornerRadiusTopRight=10).encode(
-                x=alt.X("Probabilidad:Q", axis=alt.Axis(format='%', title='Probabilidad')),
-                y=alt.Y("Clase:N", sort='-x', title='Clase'),
-                color=alt.Color("Clase:N", legend=None, scale=color_scale),
-                tooltip=["Clase", alt.Tooltip("Probabilidad", format='.2%')]
-            ).properties(height=200)
-            
-            # Estilo del gráfico
-            chart = chart.configure_axis(
-                grid=False,
-                labelColor='#d1d5db',
-                titleColor='#fefae0'
-            ).configure_view(
-                strokeWidth=0
-            )
-
-            st.altair_chart(chart, use_container_width=True)
+            make_prediction(model, bgr_proc, "proc", pred_placeholder_proc)
 
 else:
     st.info("⬆️ Sube una imagen para comenzar el análisis y activar los controles de preprocesamiento.")
