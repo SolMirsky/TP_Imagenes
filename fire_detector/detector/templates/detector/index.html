@@ -1,0 +1,157 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>🔥 Detector de Incendios Forestales</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="{% static 'detector/style.css' %}">
+  <style>
+    body {
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 0;
+    }
+    .wrap {
+      max-width: 1080px;
+      margin: 24px auto;
+      padding: 16px;
+    }
+    .title {
+      font-size: 32px;
+      font-weight: 800;
+      color: #f97316;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .btn {
+      background: #f97316;
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    input, select {
+      width: 100%;
+      padding: 6px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #f8fafc;
+      margin-bottom: 6px;
+    }
+    label {
+      font-weight: 600;
+    }
+    img {
+      width: 100%;
+      border-radius: 10px;
+      margin-top: 8px;
+    }
+    h3 {
+      margin-top: 0;
+      color: #38bdf8;
+    }
+    .alert {
+      background: #1e293b;
+      border-left: 4px solid #38bdf8;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      color: #93c5fd;
+    }
+    .error {
+      border: 1px solid #ef4444;
+      color: #fecaca;
+      background: rgba(239,68,68,0.1);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="title">🔥 Detector de Incendios Forestales</div>
+  <p>Subí una imagen, aplicá los filtros y compará la predicción del modelo antes y después del procesamiento.</p>
+
+  {% if message %}
+    <div class="alert">{{ message }}</div>
+  {% endif %}
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <!-- FORMULARIO PRINCIPAL -->
+  <form class="card" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="grid">
+      <div>
+        <label>{{ form.image.label }}</label>
+        {{ form.image }}
+      </div>
+      <div>
+        <label>{{ form.denoise_mode.label }}</label>
+        {{ form.denoise_mode }}
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <label>{{ form.do_gray.label }}</label> {{ form.do_gray }}<br/>
+        <label>{{ form.do_wb.label }}</label> {{ form.do_wb }}<br/>
+        <label>{{ form.do_sat.label }}</label> {{ form.do_sat }} ({{ form.sat_factor }})<br/>
+        <label>{{ form.do_rgb.label }}</label> {{ form.do_rgb }}<br/>
+        R {{ form.r_factor }} G {{ form.g_factor }} B {{ form.b_factor }}
+      </div>
+      <div>
+        <label>{{ form.do_clahe.label }}</label> {{ form.do_clahe }} (clip {{ form.clahe_clip }}, tiles {{ form.clahe_tiles }})<br/>
+        <label>{{ form.do_dehaze.label }}</label> {{ form.do_dehaze }} (σ {{ form.retinex_sigma }})<br/>
+        <label>{{ form.do_denoise.label }}</label> {{ form.do_denoise }}
+      </div>
+    </div>
+
+    <button class="btn" type="submit">🔎 Ejecutar Predicción</button>
+  </form>
+
+  <!-- RESULTADOS -->
+  {% if original_data_uri %}
+  <div class="grid">
+    <div class="card">
+      <h3>Imagen Original</h3>
+      <img src="{{ original_data_uri }}" alt="Imagen original">
+      <p><b>Predicción:</b> {{ pred_original.label }} — Probabilidad: {{ pred_original.prob|floatformat:2 }}</p>
+    </div>
+    <div class="card">
+      <h3>Procesada ({{ applied }})</h3>
+      <img src="{{ processed_data_uri }}" alt="Imagen procesada">
+      <p><b>Predicción:</b> {{ pred_processed.label }} — Probabilidad: {{ pred_processed.prob|floatformat:2 }}</p>
+    </div>
+  </div>
+  {% else %}
+  <p style="opacity:.7; margin-top:16px;">Aún no se ha realizado ninguna predicción.</p>
+  {% endif %}
+
+  <p style="opacity:.6; margin-top:16px;">
+    Proyecto Django basado en tu versión de Streamlit — Transfer Learning con MobileNetV2, OpenCV y TensorFlow.
+  </p>
+</div>
+</body>
+</html>
