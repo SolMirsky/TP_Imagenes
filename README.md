@@ -61,11 +61,25 @@ Ejecutar: python incendios.py
 Asegurarse de tener el archivo forest_fire_model_final.keras en la misma carpeta que app_prediccion.py.
 Luego ejecutar:
 streamlit run app_prediccion.py
+<<<<<<< HEAD
 
 Abrir el navegador en la URL que aparece (por defecto: http://localhost:8501)
 En la interfaz: Subir una imagen. Activar los filtros de procesamiento desde la barra lateral. Presionar “Ejecutar Predicción” para ver los resultados de detección.
 
 ``` 
+=======
+Abrí el navegador en la URL que aparece (por defecto: http://localhost:8501)
+En la interfaz: Subí una imagen. Activá los filtros de procesamiento desde la barra lateral. Presioná “Ejecutar Predicción” para ver los resultados de detección.
+
+3. Ejecución del Proyecto con Django
+La aplicación también puede ejecutarse como un sitio web usando Django.
+Desde la carpeta del proyecto, correr:
+python manage.py runserver
+Abrir en el navegador:  http://127.0.0.1:8000/
+En la interfaz web de Django podrás:
+Subir una imagen para analizar, Seleccionar los filtros de procesamiento disponibles, Ver la imagen procesada, Obtener la predicción del modelo entrenado, Navegar por una interfaz con sidebar.
+
+>>>>>>> 0fefa8d (Update README.md)
 ## Estructura del Repositorio
 
 TP_Imagenes/
