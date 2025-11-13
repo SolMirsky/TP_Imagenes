@@ -1,150 +1,184 @@
-import os
+import base64
 import cv2
 import numpy as np
-from pathlib import Path
-from django.shortcuts import render
-from django.conf import settings
 import tensorflow as tf
+from django.shortcuts import render
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.views.decorators.csrf import csrf_exempt
+from .forms import FireForm
 
-from .forms import PredictForm
-from .utils import (
-    preprocess_for_model, bgr_to_data_uri,
-    to_grayscale, white_balance_gray_world, increase_saturation,
-    adjust_rgb_channels, retinex_dehaze, apply_clahe_bgr,
-    denoise_bilateral, denoise_median
-)
 
 # =========================
-# CONFIG GENERAL
+# 🔹 Página principal
 # =========================
-BASE_DIR = Path(settings.BASE_DIR)
-MODEL_PATH = BASE_DIR / "forest_fire_model_final.keras"
-CLASS_NAMES = ["Fuego", "Sin Fuego"]
-IMG_SIZE = (160, 160)
+def fire_detector_view(request):
+    form = FireForm()
+    return render(request, "detector/index.html", {"form": form})
 
-# =========================
-# CARGA ÚNICA DEL MODELO
-# =========================
-def _load_model():
-    """Carga el modelo Keras (.keras) una sola vez."""
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"No se encontró el modelo en: {MODEL_PATH}")
-    try:
-        model = tf.keras.models.load_model(MODEL_PATH.as_posix(), compile=False)
-    except Exception:
-        # fallback si hay capas Lambda u otras incompatibilidades
-        model = tf.keras.models.load_model(MODEL_PATH.as_posix(), compile=False, safe_mode=False)
-    return model
-
-# Cache del modelo en memoria
-MODEL = _load_model()
 
 # =========================
-# VISTA PRINCIPAL
+# 🔹 Codificar imagen en base64
 # =========================
-def index(request):
-    """Vista principal: formulario, preprocesamiento y predicción."""
-    print("✅ Renderizando index.html")
+def encode_image(img):
+    _, buffer = cv2.imencode(".jpg", img)
+    return base64.b64encode(buffer).decode("utf-8")
 
-    # Mensaje inicial si no hay imagen cargada
-    context = {
-        "form": PredictForm(),
-        "message": "Subí una imagen para analizar si hay fuego 🔥"
-    }
 
-    if request.method == "POST":
-        form = PredictForm(request.POST, request.FILES)
-        if form.is_valid():
-            try:
-                # --- Leer imagen subida ---
-                file_bytes = np.frombuffer(request.FILES["image"].read(), np.uint8)
-                bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-                if bgr is None:
-                    context["error"] = "No se pudo leer la imagen subida."
-                    return render(request, "detector/index.html", context)
+# =========================
+# 🔹 Aplicar filtros
+# =========================
+def apply_filters(image, form):
+    img = image.copy()
 
-                bgr_proc = bgr.copy()
-                applied = []
+    # Escala de grises
+    if form.cleaned_data.get("do_gray"):
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-                # --- Flags de filtros ---
-                do_gray = form.cleaned_data.get("do_gray")
-                do_wb = form.cleaned_data.get("do_wb")
-                do_sat = form.cleaned_data.get("do_sat")
-                do_rgb = form.cleaned_data.get("do_rgb")
-                do_clahe = form.cleaned_data.get("do_clahe")
-                do_dehaze = form.cleaned_data.get("do_dehaze")
-                do_denoise = form.cleaned_data.get("do_denoise")
+    # Balance de blancos
+    if form.cleaned_data.get("do_wb"):
+        avg_b = np.mean(img[:, :, 0])
+        avg_g = np.mean(img[:, :, 1])
+        avg_r = np.mean(img[:, :, 2])
+        img[:, :, 0] = np.clip(img[:, :, 0] * (avg_g / avg_b), 0, 255)
+        img[:, :, 2] = np.clip(img[:, :, 2] * (avg_g / avg_r), 0, 255)
 
-                # --- Parámetros ---
-                sat_factor = form.cleaned_data.get("sat_factor") or 1.2
-                r_factor = form.cleaned_data.get("r_factor") or 1.0
-                g_factor = form.cleaned_data.get("g_factor") or 1.0
-                b_factor = form.cleaned_data.get("b_factor") or 1.0
-                clahe_clip = form.cleaned_data.get("clahe_clip") or 2.0
-                clahe_tiles = form.cleaned_data.get("clahe_tiles") or 8
-                retinex_sigma = form.cleaned_data.get("retinex_sigma") or 80.0
-                denoise_mode = form.cleaned_data.get("denoise_mode") or "bilateral"
-                bilateral_d = form.cleaned_data.get("bilateral_d") or 7
-                bilateral_sigmaColor = form.cleaned_data.get("bilateral_sigmaColor") or 50
-                bilateral_sigmaSpace = form.cleaned_data.get("bilateral_sigmaSpace") or 50
-                median_ksize = form.cleaned_data.get("median_ksize") or 3
+    # Saturación
+    if form.cleaned_data.get("do_sat"):
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+        s = np.clip(s * form.cleaned_data.get("sat_factor", 1.2), 0, 255)
+        hsv = cv2.merge([h, s, v])
+        img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
-                # --- Aplicar filtros ---
-                if do_gray:
-                    bgr_proc = to_grayscale(bgr_proc); applied.append("Grises")
-                if do_wb:
-                    bgr_proc = white_balance_gray_world(bgr_proc); applied.append("WB")
-                if do_rgb:
-                    bgr_proc = adjust_rgb_channels(bgr_proc, r_factor, g_factor, b_factor)
-                    applied.append(f"RGB({r_factor:.1f},{g_factor:.1f},{b_factor:.1f})")
-                if do_sat:
-                    bgr_proc = increase_saturation(bgr_proc, factor=sat_factor)
-                    applied.append(f"Saturación x{sat_factor}")
-                if do_dehaze:
-                    bgr_proc = retinex_dehaze(bgr_proc, retinex_sigma); applied.append("Retinex")
-                if do_clahe:
-                    bgr_proc = apply_clahe_bgr(bgr_proc, clahe_clip, clahe_tiles); applied.append("CLAHE")
-                if do_denoise:
-                    if denoise_mode == "bilateral":
-                        bgr_proc = denoise_bilateral(bgr_proc, bilateral_d, bilateral_sigmaColor, bilateral_sigmaSpace)
-                        applied.append("Denoise Bilateral")
-                    else:
-                        bgr_proc = denoise_median(bgr_proc, median_ksize)
-                        applied.append("Denoise Mediana")
+    # Ajuste RGB
+    if form.cleaned_data.get("do_rgb"):
+        img[:, :, 2] = np.clip(img[:, :, 2] * form.cleaned_data.get("r_factor"), 0, 255)
+        img[:, :, 1] = np.clip(img[:, :, 1] * form.cleaned_data.get("g_factor"), 0, 255)
+        img[:, :, 0] = np.clip(img[:, :, 0] * form.cleaned_data.get("b_factor"), 0, 255)
 
-                # =========================
-                # PREDICCIÓN ORIGINAL
-                # =========================
-                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-                x0 = np.expand_dims(preprocess_for_model(rgb), axis=0)
-                probs0 = MODEL.predict(x0, verbose=0)[0]
-                idx0 = int(np.argmax(probs0))
-                pred0 = {"label": CLASS_NAMES[idx0], "prob": float(probs0[idx0])}
+    # CLAHE
+    if form.cleaned_data.get("do_clahe"):
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(
+            clipLimit=form.cleaned_data.get("clahe_clip"),
+            tileGridSize=(form.cleaned_data.get("clahe_tiles"), form.cleaned_data.get("clahe_tiles"))
+        )
+        l2 = clahe.apply(l)
+        img = cv2.cvtColor(cv2.merge((l2, a, b)), cv2.COLOR_LAB2BGR)
 
-                # =========================
-                # PREDICCIÓN PROCESADA
-                # =========================
-                rgbp = cv2.cvtColor(bgr_proc, cv2.COLOR_BGR2RGB)
-                xp = np.expand_dims(preprocess_for_model(rgbp), axis=0)
-                probsp = MODEL.predict(xp, verbose=0)[0]
-                idxp = int(np.argmax(probsp))
-                predp = {"label": CLASS_NAMES[idxp], "prob": float(probsp[idxp])}
+    # Dehaze (Retinex)
+    if form.cleaned_data.get("do_dehaze"):
+        sigma = form.cleaned_data.get("retinex_sigma")
+        blur = cv2.GaussianBlur(img, (0, 0), sigma)
+        img = cv2.addWeighted(img, 4, blur, -4, 128)
 
-                # --- Pasar datos al template ---
-                context.update({
-                    "form": form,
-                    "original_data_uri": bgr_to_data_uri(bgr),
-                    "processed_data_uri": bgr_to_data_uri(bgr_proc),
-                    "applied": " → ".join(applied) if applied else "Ningún filtro aplicado",
-                    "pred_original": pred0,
-                    "pred_processed": predp,
-                    "message": None,
-                })
+    # Reducción de ruido
+    if form.cleaned_data.get("do_denoise"):
+        mode = form.cleaned_data.get("denoise_mode")
 
-            except Exception as e:
-                context["error"] = f"Error al procesar la imagen: {e}"
-
+        if mode == "bilateral":
+            img = cv2.bilateralFilter(
+                img,
+                d=form.cleaned_data.get("bilateral_d"),
+                sigmaColor=form.cleaned_data.get("bilateral_sigmaColor"),
+                sigmaSpace=form.cleaned_data.get("bilateral_sigmaSpace")
+            )
         else:
-            context["error"] = "Formulario inválido."
+            img = cv2.medianBlur(img, form.cleaned_data.get("median_ksize"))
 
-    return render(request, "detector/index.html", context)
+    return img
+
+
+# =========================
+# 🔹 HTMX — procesar imagen y mostrar preview
+# =========================
+def process_image_ajax(request):
+    form = FireForm(request.POST or None, request.FILES or None)
+    image_data = None
+
+    # Imagen subida
+    if form.is_valid() and "image" in request.FILES:
+        image_file = request.FILES["image"].read()
+        request.session["image_cache"] = base64.b64encode(image_file).decode("utf-8")
+        np_arr = np.frombuffer(image_file, np.uint8)
+        image_data = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    # Imagen que ya estaba en sesión
+    elif "image_cache" in request.session:
+        cached = base64.b64decode(request.session["image_cache"])
+        np_arr = np.frombuffer(cached, np.uint8)
+        image_data = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    if image_data is None:
+        return HttpResponse("<p>⚠️ No se pudo cargar la imagen.</p>")
+
+    # Aplicar filtros
+    processed = apply_filters(image_data, form)
+
+    # Guardar imágenes en sesión con nombres correctos
+    request.session["orig_image"] = encode_image(image_data)
+    request.session["proc_image"] = encode_image(processed)
+
+    # Render preview
+    html = render_to_string("detector/_preview.html", {
+        "original_data_uri": f"data:image/jpeg;base64,{encode_image(image_data)}",
+        "processed_data_uri": f"data:image/jpeg;base64,{encode_image(processed)}"
+    })
+
+    return HttpResponse(html)
+
+
+# =========================
+# 🔹 Predicción doble (original + procesada)
+# =========================
+@csrf_exempt
+def predict_view(request):
+
+    if "orig_image" not in request.session or "proc_image" not in request.session:
+        return HttpResponse("<p style='color:#f87171;'>⚠️ No hay imágenes para predecir.</p>")
+
+    try:
+        model = tf.keras.models.load_model("forest_fire_model_final.keras", compile=False)
+
+        def decode_image(b64_string):
+            data = base64.b64decode(b64_string)
+            np_arr = np.frombuffer(data, np.uint8)
+            return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        def prepare(img):
+            img = cv2.resize(img, (160, 160))
+            return np.expand_dims(img / 255.0, axis=0)
+
+        img_orig = decode_image(request.session["orig_image"])
+        img_proc = decode_image(request.session["proc_image"])
+
+        prob_o = float(model.predict(prepare(img_orig))[0][0])
+        prob_p = float(model.predict(prepare(img_proc))[0][0])
+
+        label_o = "🔥 Incendio" if prob_o > 0.5 else "🌲 Sin Incendio"
+        label_p = "🔥 Incendio" if prob_p > 0.5 else "🌲 Sin Incendio"
+
+        html = f"""
+        <div style='margin-top:15px'>
+          <h3 style='color:#fbbf24;'>Resultados:</h3>
+          <div style='display:flex;gap:40px'>
+
+            <div style='width:50%;text-align:center'>
+              <h4>Imagen Original</h4>
+              <p><b>{label_o}</b> ({prob_o*100:.2f}%)</p>
+            </div>
+
+            <div style='width:50%;text-align:center'>
+              <h4>Imagen Procesada</h4>
+              <p><b>{label_p}</b> ({prob_p*100:.2f}%)</p>
+            </div>
+          </div>
+        </div>
+        """
+        return HttpResponse(html)
+
+    except Exception as e:
+        return HttpResponse(f"<pre style='color:red'>❌ Error en predicción:\n{str(e)}</pre>")

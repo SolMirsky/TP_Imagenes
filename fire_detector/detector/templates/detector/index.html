@@ -2,156 +2,213 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
   <title>🔥 Detector de Incendios Forestales</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="{% static 'detector/style.css' %}">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
   <style>
     body {
-      font-family: 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Segoe UI', sans-serif;
       background: #0f172a;
       color: #f8fafc;
       margin: 0;
-      padding: 0;
+      display: flex;
+      height: 100vh;
     }
-    .wrap {
-      max-width: 1080px;
-      margin: 24px auto;
-      padding: 16px;
-    }
-    .title {
-      font-size: 32px;
-      font-weight: 800;
-      color: #f97316;
-      margin-bottom: 16px;
-    }
-    .card {
-      background: rgba(255,255,255,0.05);
-      border-radius: 12px;
-      padding: 16px;
-      margin-top: 16px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    .btn {
-      background: #f97316;
-      color: #fff;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 10px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-top: 8px;
-    }
-    input, select {
-      width: 100%;
-      padding: 6px;
-      border-radius: 6px;
-      border: 1px solid #334155;
+    .sidebar {
+      width: 280px;
       background: #1e293b;
-      color: #f8fafc;
-      margin-bottom: 6px;
+      padding: 20px;
+      border-right: 1px solid #334155;
+      overflow-y: auto;
     }
-    label {
-      font-weight: 600;
+    .main-content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
     }
     img {
       width: 100%;
       border-radius: 10px;
       margin-top: 8px;
     }
-    h3 {
-      margin-top: 0;
-      color: #38bdf8;
+    .btn {
+      background: #f97316;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 16px;
     }
-    .alert {
+    h4 {
+      margin-bottom: 10px;
+      margin-top: 20px;
+      color: #fbbf24;
+    }
+    .filter-params {
+      margin-left: 15px;
+      margin-bottom: 10px;
+      display: none;
+    }
+    input[type="number"], input[type="text"] {
+      width: 90%;
+      margin-top: 4px;
+      border-radius: 5px;
+      border: 1px solid #475569;
       background: #1e293b;
-      border-left: 4px solid #38bdf8;
-      padding: 12px;
-      border-radius: 6px;
-      margin-bottom: 12px;
-      color: #93c5fd;
+      color: #f8fafc;
+      padding: 4px;
     }
-    .error {
-      border: 1px solid #ef4444;
-      color: #fecaca;
-      background: rgba(239,68,68,0.1);
-      border-radius: 8px;
-      padding: 10px;
-      margin-bottom: 16px;
+    #loading {
+      display:none;
+      color: #fbbf24;
+      margin-top: 10px;
+      font-size: 18px;
     }
   </style>
 </head>
+
 <body>
-<div class="wrap">
 
-  <div class="title">🔥 Detector de Incendios Forestales</div>
-  <p>Subí una imagen, aplicá los filtros y compará la predicción del modelo antes y después del procesamiento.</p>
+  <!-- 🔹 PANEL IZQUIERDO -->
+  <aside class="sidebar">
+    <h3>⚙️ Ajustes de Procesamiento</h3>
 
-  {% if message %}
-    <div class="alert">{{ message }}</div>
-  {% endif %}
+    <form id="filters-form"
+      hx-post="{% url 'process_image_ajax' %}"
+      hx-target="#preview"
+      hx-swap="innerHTML"
+      hx-trigger="change from:input"
+      hx-include="#filters-form,#upload-form"
+      enctype="multipart/form-data">
 
-  {% if error %}
-    <div class="error">{{ error }}</div>
-  {% endif %}
+      {% csrf_token %}
+      <h4>Filtros:</h4>
 
-  <!-- FORMULARIO PRINCIPAL -->
-  <form class="card" method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    <div class="grid">
-      <div>
-        <label>{{ form.image.label }}</label>
-        {{ form.image }}
+      <label>{{ form.do_gray.label }}</label> {{ form.do_gray }}<br>
+
+      <label>{{ form.do_wb.label }}</label> {{ form.do_wb }}<br>
+
+      <label>{{ form.do_sat.label }}</label> {{ form.do_sat }}<br>
+      <div id="params-do_sat" class="filter-params">
+        {{ form.sat_factor.label_tag }} {{ form.sat_factor }}
       </div>
-      <div>
-        <label>{{ form.denoise_mode.label }}</label>
-        {{ form.denoise_mode }}
+
+      <label>{{ form.do_rgb.label }}</label> {{ form.do_rgb }}<br>
+      <div id="params-do_rgb" class="filter-params">
+        <label>R:</label> {{ form.r_factor }}<br>
+        <label>G:</label> {{ form.g_factor }}<br>
+        <label>B:</label> {{ form.b_factor }}
       </div>
+
+      <label>{{ form.do_clahe.label }}</label> {{ form.do_clahe }}<br>
+      <div id="params-do_clahe" class="filter-params">
+        {{ form.clahe_clip.label_tag }} {{ form.clahe_clip }}<br>
+        {{ form.clahe_tiles.label_tag }} {{ form.clahe_tiles }}
+      </div>
+
+      <label>{{ form.do_dehaze.label }}</label> {{ form.do_dehaze }}<br>
+      <div id="params-do_dehaze" class="filter-params">
+        {{ form.retinex_sigma.label_tag }} {{ form.retinex_sigma }}
+      </div>
+
+      <label>{{ form.do_denoise.label }}</label> {{ form.do_denoise }}<br>
+      <div id="params-do_denoise" class="filter-params">
+        {{ form.denoise_mode.label_tag }} {{ form.denoise_mode }}<br>
+
+        <div id="params-denoise-bilateral">
+          {{ form.bilateral_d.label_tag }} {{ form.bilateral_d }}<br>
+          {{ form.bilateral_sigmaColor.label_tag }} {{ form.bilateral_sigmaColor }}<br>
+          {{ form.bilateral_sigmaSpace.label_tag }} {{ form.bilateral_sigmaSpace }}
+        </div>
+
+        <div id="params-denoise-median" style="display:none;">
+          {{ form.median_ksize.label_tag }} {{ form.median_ksize }}
+        </div>
+      </div>
+
+    </form>
+  </aside>
+
+  <!-- 🔹 PANEL DERECHO -->
+  <main class="main-content">
+    <h1 style="color:#f97316;">🔥 Detector de Incendios Forestales 🌲</h1>
+    <p>Subí una imagen, aplicá los filtros y observá los cambios antes de predecir.</p>
+
+    <!-- 📸 Cargar imagen -->
+    <form id="upload-form"
+          hx-post="{% url 'process_image_ajax' %}"
+          hx-target="#preview"
+          hx-swap="innerHTML"
+          enctype="multipart/form-data">
+
+      {% csrf_token %}
+      <label><b>Subir imagen:</b></label><br>
+      {{ form.image }}<br>
+      <button class="btn" type="submit">📤 Cargar Imagen</button>
+    </form>
+
+    <!-- 👀 Vista previa -->
+    <div id="preview" style="margin-top: 20px;">
+      {% include 'detector/_preview.html' %}
     </div>
 
-    <div class="grid">
-      <div>
-        <label>{{ form.do_gray.label }}</label> {{ form.do_gray }}<br/>
-        <label>{{ form.do_wb.label }}</label> {{ form.do_wb }}<br/>
-        <label>{{ form.do_sat.label }}</label> {{ form.do_sat }} ({{ form.sat_factor }})<br/>
-        <label>{{ form.do_rgb.label }}</label> {{ form.do_rgb }}<br/>
-        R {{ form.r_factor }} G {{ form.g_factor }} B {{ form.b_factor }}
-      </div>
-      <div>
-        <label>{{ form.do_clahe.label }}</label> {{ form.do_clahe }} (clip {{ form.clahe_clip }}, tiles {{ form.clahe_tiles }})<br/>
-        <label>{{ form.do_dehaze.label }}</label> {{ form.do_dehaze }} (σ {{ form.retinex_sigma }})<br/>
-        <label>{{ form.do_denoise.label }}</label> {{ form.do_denoise }}
-      </div>
-    </div>
+    <!-- 🔄 Indicador "Procesando..." -->
+    <div id="loading">⏳ Procesando predicción... espere un momento</div>
 
-    <button class="btn" type="submit">🔎 Ejecutar Predicción</button>
-  </form>
+    <!-- 🔍 Predicción -->
+    <form id="predict-form"
+          hx-post="{% url 'predict' %}"
+          hx-target="#prediction-results"
+          hx-swap="innerHTML"
+          hx-indicator="#loading"
+          hx-include="#filters-form,#upload-form"
+          method="post">
 
-  <!-- RESULTADOS -->
-  {% if original_data_uri %}
-  <div class="grid">
-    <div class="card">
-      <h3>Imagen Original</h3>
-      <img src="{{ original_data_uri }}" alt="Imagen original">
-      <p><b>Predicción:</b> {{ pred_original.label }} — Probabilidad: {{ pred_original.prob|floatformat:2 }}</p>
-    </div>
-    <div class="card">
-      <h3>Procesada ({{ applied }})</h3>
-      <img src="{{ processed_data_uri }}" alt="Imagen procesada">
-      <p><b>Predicción:</b> {{ pred_processed.label }} — Probabilidad: {{ pred_processed.prob|floatformat:2 }}</p>
-    </div>
-  </div>
-  {% else %}
-  <p style="opacity:.7; margin-top:16px;">Aún no se ha realizado ninguna predicción.</p>
-  {% endif %}
+      {% csrf_token %}
+      <button class="btn">🔎 Ejecutar Predicción</button>
+    </form>
 
-  <p style="opacity:.6; margin-top:16px;">
-    Proyecto Django basado en tu versión de Streamlit — Transfer Learning con MobileNetV2, OpenCV y TensorFlow.
-  </p>
-</div>
+    <!-- Aquí aparecerán los resultados -->
+    <div id="prediction-results" style="margin-top:20px;"></div>
+
+  </main>
+
+  <!-- 🔧 Scripts de UI -->
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+      const filterCheckboxes = document.querySelectorAll("#filters-form input[type='checkbox']");
+      filterCheckboxes.forEach(cb => {
+        cb.addEventListener("change", () => {
+          const paramSection = document.querySelector(`#params-${cb.name}`);
+          if (paramSection) {
+            paramSection.style.display = cb.checked ? "block" : "none";
+          }
+        });
+      });
+
+      const denoiseSelect = document.querySelector("select[name='denoise_mode']");
+      if (denoiseSelect) {
+        denoiseSelect.addEventListener("change", () => {
+          const bilateral = document.querySelector("#params-denoise-bilateral");
+          const median = document.querySelector("#params-denoise-median");
+
+          if (denoiseSelect.value === "bilateral") {
+            bilateral.style.display = "block";
+            median.style.display = "none";
+          } else {
+            bilateral.style.display = "none";
+            median.style.display = "block";
+          }
+        });
+      }
+    });
+  </script>
+
 </body>
 </html>
