@@ -1,0 +1,10 @@
+# Ignorar entorno virtual
+fire_env/
+fire_env/*
+
+# Archivos del sistema
+__pycache__/
+*.pyc
+
+# Configs de VSCode
+.vscode/
