@@ -65,37 +65,38 @@ streamlit run app_prediccion.py
 Abrir el navegador en la URL que aparece (por defecto: http://localhost:8501)
 En la interfaz: Subir una imagen. Activar los filtros de procesamiento desde la barra lateral. Presionar “Ejecutar Predicción” para ver los resultados de detección.
 
+``` 
 ## Estructura del Repositorio
+
 TP_Imagenes/
-│
 ├── incendios.py                  # Entrenamiento del modelo (MobileNetV2)
 ├── app_prediccion.py             # Aplicación interactiva Streamlit
 ├── forest_fire_model_final.keras # Modelo entrenado
 ├── train_config.json             # Parámetros de configuración
-└── README.md                     # Documentación del proyecto
-├──fire_detector/
-├── forest_fire_model.keras # Modelo entrenado para detección de fuego
-├── db.sqlite3              # Base de datos (sin uso actualmente)
-├── manage.py               # Herramienta principal de gestión
-└── venv / forest_env       # Entornos virtuales de Python
-
+├── README.md                     # Documentación del proyecto
 │
-├── fire_detector/         # Configuración principal de Django
-│   ├── settings.py        # Configuración global del proyecto
-│   ├── urls.py            # Rutas principales
-│   ├── wsgi.py / asgi.py  # Arranque del servidor
-│   └── __init__.py
+├── forest_env / venv             # Entornos virtuales (no deberían subirse)
+├── db.sqlite3                    # Base de datos (no utilizada)
 │
-├── detector/              # Aplicación principal
-│   ├── views.py           # Lógica de procesamiento y predicción
-│   ├── urls.py            # Rutas específicas de la app
-│   ├── templates/         # Archivos HTML del frontend
-│   ├── static/            # CSS, JS e imágenes estáticas
-│   ├── forms.py           # Formularios
-│   ├── utils.py           # Funciones auxiliares (procesamiento)
-│   ├── models.py          # Sin modelos definidos aún
-│   └── admin.py           # Vacío, no se utiliza por ahora
-│
+├── fire_detector/                # Proyecto Django principal
+│   ├── manage.py                 # Herramienta de administración
+│   │
+│   ├── fire_detector/            # Configuración del proyecto
+│   │   ├── settings.py           # Ajustes globales
+│   │   ├── urls.py               # Rutas principales
+│   │   ├── wsgi.py / asgi.py     # Arranque del servidor
+│   │   └── __init__.py
+│   │
+│   └── detector/                 # Aplicación Django principal
+│       ├── views.py              # Procesamiento y predicción
+│       ├── urls.py               # Rutas de la app
+│       ├── templates/            # HTML del frontend
+│       ├── static/               # Archivos CSS/JS/imagenes
+│       ├── forms.py              # Formularios
+│       ├── utils.py              # Funciones auxiliares
+│       ├── models.py             # Actualmente sin modelos
+│       └── admin.py              # No utilizado por ahora
+``` 
 La carpeta `detector` contiene la aplicación principal, incluyendo vistas, formularios, plantillas HTML, recursos estáticos y funciones de procesamiento de imágenes. 
 Actualmente la aplicación no define modelos en `models.py`, por lo que no se almacenan imágenes ni resultados de forma persistente.
 
