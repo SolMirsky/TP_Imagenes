@@ -7,7 +7,7 @@
 
 ## Clasificación de incendios en paisajes forestales 🌲🔥
 
-Este proyecto aborda la detección automática de incendios forestales mediante clasificación binaria de imágenes (Fuego / Sin Fuego), utilizando Transfer Learning con MobileNetV2 y un conjunto de técnicas avanzadas de procesamiento de imagen aplicadas de forma interactiva a través de Streamlit.
+Este proyecto aborda la detección automática de incendios forestales mediante clasificación binaria de imágenes (Fuego / Sin Fuego), utilizando Transfer Learning con MobileNetV2 y un conjunto de técnicas avanzadas de procesamiento de imagen aplicadas de forma interactiva a través de Streamlit y Django.
 
 El modelo se entrena con TensorFlow/Keras, y la aplicación permite al usuario subir imágenes, aplicar filtros visuales y de corrección, y obtener predicciones en tiempo real con visualizaciones comparativas (imagen original vs. imagen preprocesada).
 Combina Machine Learning y una app web en Django para detectar incendios en imágenes de paisajes forestales.
