@@ -1,0 +1,214 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>🔥 Detector de Incendios Forestales</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      display: flex;
+      height: 100vh;
+    }
+    .sidebar {
+      width: 280px;
+      background: #1e293b;
+      padding: 20px;
+      border-right: 1px solid #334155;
+      overflow-y: auto;
+    }
+    .main-content {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+    img {
+      width: 100%;
+      border-radius: 10px;
+      margin-top: 8px;
+    }
+    .btn {
+      background: #f97316;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-weight: bold;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 16px;
+    }
+    h4 {
+      margin-bottom: 10px;
+      margin-top: 20px;
+      color: #fbbf24;
+    }
+    .filter-params {
+      margin-left: 15px;
+      margin-bottom: 10px;
+      display: none;
+    }
+    input[type="number"], input[type="text"] {
+      width: 90%;
+      margin-top: 4px;
+      border-radius: 5px;
+      border: 1px solid #475569;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 4px;
+    }
+    #loading {
+      display:none;
+      color: #fbbf24;
+      margin-top: 10px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- 🔹 PANEL IZQUIERDO -->
+  <aside class="sidebar">
+    <h3>⚙️ Ajustes de Procesamiento</h3>
+
+    <form id="filters-form"
+      hx-post="{% url 'process_image_ajax' %}"
+      hx-target="#preview"
+      hx-swap="innerHTML"
+      hx-trigger="change from:input"
+      hx-include="#filters-form,#upload-form"
+      enctype="multipart/form-data">
+
+      {% csrf_token %}
+      <h4>Filtros:</h4>
+
+      <label>{{ form.do_gray.label }}</label> {{ form.do_gray }}<br>
+
+      <label>{{ form.do_wb.label }}</label> {{ form.do_wb }}<br>
+
+      <label>{{ form.do_sat.label }}</label> {{ form.do_sat }}<br>
+      <div id="params-do_sat" class="filter-params">
+        {{ form.sat_factor.label_tag }} {{ form.sat_factor }}
+      </div>
+
+      <label>{{ form.do_rgb.label }}</label> {{ form.do_rgb }}<br>
+      <div id="params-do_rgb" class="filter-params">
+        <label>R:</label> {{ form.r_factor }}<br>
+        <label>G:</label> {{ form.g_factor }}<br>
+        <label>B:</label> {{ form.b_factor }}
+      </div>
+
+      <label>{{ form.do_clahe.label }}</label> {{ form.do_clahe }}<br>
+      <div id="params-do_clahe" class="filter-params">
+        {{ form.clahe_clip.label_tag }} {{ form.clahe_clip }}<br>
+        {{ form.clahe_tiles.label_tag }} {{ form.clahe_tiles }}
+      </div>
+
+      <label>{{ form.do_dehaze.label }}</label> {{ form.do_dehaze }}<br>
+      <div id="params-do_dehaze" class="filter-params">
+        {{ form.retinex_sigma.label_tag }} {{ form.retinex_sigma }}
+      </div>
+
+      <label>{{ form.do_denoise.label }}</label> {{ form.do_denoise }}<br>
+      <div id="params-do_denoise" class="filter-params">
+        {{ form.denoise_mode.label_tag }} {{ form.denoise_mode }}<br>
+
+        <div id="params-denoise-bilateral">
+          {{ form.bilateral_d.label_tag }} {{ form.bilateral_d }}<br>
+          {{ form.bilateral_sigmaColor.label_tag }} {{ form.bilateral_sigmaColor }}<br>
+          {{ form.bilateral_sigmaSpace.label_tag }} {{ form.bilateral_sigmaSpace }}
+        </div>
+
+        <div id="params-denoise-median" style="display:none;">
+          {{ form.median_ksize.label_tag }} {{ form.median_ksize }}
+        </div>
+      </div>
+
+    </form>
+  </aside>
+
+  <!-- 🔹 PANEL DERECHO -->
+  <main class="main-content">
+    <h1 style="color:#f97316;">🔥 Detector de Incendios Forestales 🌲</h1>
+    <p>Subí una imagen, aplicá los filtros y observá los cambios antes de predecir.</p>
+
+    <!-- 📸 Cargar imagen -->
+    <form id="upload-form"
+          hx-post="{% url 'process_image_ajax' %}"
+          hx-target="#preview"
+          hx-swap="innerHTML"
+          enctype="multipart/form-data">
+
+      {% csrf_token %}
+      <label><b>Subir imagen:</b></label><br>
+      {{ form.image }}<br>
+      <button class="btn" type="submit">📤 Cargar Imagen</button>
+    </form>
+
+    <!-- 👀 Vista previa -->
+    <div id="preview" style="margin-top: 20px;">
+      {% include 'detector/_preview.html' %}
+    </div>
+
+    <!-- 🔄 Indicador "Procesando..." -->
+    <div id="loading">⏳ Procesando predicción... espere un momento</div>
+
+    <!-- 🔍 Predicción -->
+    <form id="predict-form"
+          hx-post="{% url 'predict' %}"
+          hx-target="#prediction-results"
+          hx-swap="innerHTML"
+          hx-indicator="#loading"
+          hx-include="#filters-form,#upload-form"
+          method="post">
+
+      {% csrf_token %}
+      <button class="btn">🔎 Ejecutar Predicción</button>
+    </form>
+
+    <!-- Aquí aparecerán los resultados -->
+    <div id="prediction-results" style="margin-top:20px;"></div>
+
+  </main>
+
+  <!-- 🔧 Scripts de UI -->
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+      const filterCheckboxes = document.querySelectorAll("#filters-form input[type='checkbox']");
+      filterCheckboxes.forEach(cb => {
+        cb.addEventListener("change", () => {
+          const paramSection = document.querySelector(`#params-${cb.name}`);
+          if (paramSection) {
+            paramSection.style.display = cb.checked ? "block" : "none";
+          }
+        });
+      });
+
+      const denoiseSelect = document.querySelector("select[name='denoise_mode']");
+      if (denoiseSelect) {
+        denoiseSelect.addEventListener("change", () => {
+          const bilateral = document.querySelector("#params-denoise-bilateral");
+          const median = document.querySelector("#params-denoise-median");
+
+          if (denoiseSelect.value === "bilateral") {
+            bilateral.style.display = "block";
+            median.style.display = "none";
+          } else {
+            bilateral.style.display = "none";
+            median.style.display = "block";
+          }
+        });
+      }
+    });
+  </script>
+
+</body>
+</html>

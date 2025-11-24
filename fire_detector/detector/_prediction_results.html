@@ -1,0 +1,19 @@
+<div style="display:flex; gap:40px; margin-top:25px;">
+
+  <!-- RESULTADO IMAGEN ORIGINAL -->
+  <div style="flex:1; text-align:center;">
+    <h3 style="color:#fbbf24;">Resultado Imagen Original</h3>
+    <p style="font-size:20px;">
+      {{ label_orig }} — <b>{{ prob_orig|floatformat:2 }}%</b>
+    </p>
+  </div>
+
+  <!-- RESULTADO IMAGEN PROCESADA -->
+  <div style="flex:1; text-align:center;">
+    <h3 style="color:#fbbf24;">Resultado Imagen Procesada</h3>
+    <p style="font-size:20px;">
+      {{ label_proc }} — <b>{{ prob_proc|floatformat:2 }}%</b>
+    </p>
+  </div>
+
+</div>
