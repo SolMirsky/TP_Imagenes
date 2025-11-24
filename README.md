@@ -18,8 +18,8 @@ El modelo se entrena con el Forest Fire Dataset de Kaggle
 https://www.kaggle.com/datasets/alik05/forest-fire-dataset
 Clases: Fire y No Fire
 Tamaño de imagen: 160×160 píxeles
-División: 70 % entrenamiento, 20 % validación, 10 % te
-y la app permite al usuario subir imágenes y clasificarlas. Además, se pueden aplicar filtros a las imágenes
+División: 70 % entrenamiento, 20 % validación, 10 % test
+La app permite al usuario subir imágenes y clasificarlas. Además, se pueden aplicar filtros a las imágenes
 
 ## Arquitectura del Proyecto
 
