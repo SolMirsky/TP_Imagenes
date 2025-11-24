@@ -113,7 +113,9 @@ Abrir el navegador en la URL que aparece (por defecto: http://localhost:8501)
 En la interfaz: Subir una imagen. Activar los filtros de procesamiento desde la barra lateral. Presionar “Ejecutar Predicción” para ver los resultados de detección.
 
 3. Ejecución del Proyecto con Django
+   
 La aplicación también puede ejecutarse como un sitio web usando Django.
+
 Desde la carpeta del proyecto:
 
 Instalar dependencias:
@@ -220,7 +222,7 @@ Doble predicción: sobre la imagen original y la procesada.
 
 La aplicación implementa un conjunto de técnicas diseñadas para mejorar la visibilidad, corrección de color y reducción de ruido en imágenes reales de incendios:
 
-Técnica	Descripción
+Técnica y 	Descripción
 Grayscale (Escala de grises)	Convierte la imagen a un solo canal de luminancia, útil para análisis estructural.
 Balance de Blancos (Gray World)	Corrige dominantes de color (por ejemplo, exceso de rojo o verde) ajustando cada canal RGB al promedio global.
 Ajuste RGB Manual	Permite modificar individualmente los niveles de rojo, verde y azul mediante sliders interactivos.
